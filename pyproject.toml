@@ -22,7 +22,7 @@ ai = ["Pillow>=10.0"]
 glint-bridge = "bridge.main:main"
 
 [project.urls]
-Homepage = "https://github.com/Glint-Org/Glint-Bridge"
+Homepage = "https://github.com/GlintShot/Glint-Bridge"
 
 [tool.setuptools.packages.find]
 include = ["bridge*"]

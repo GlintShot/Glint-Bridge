@@ -1,6 +1,6 @@
 # Glint Bridge
 
-ADB screenshot capture for **Android**, optional **web** crawl, and intelligent filtering with **your** API key. Part of [Glint](https://github.com/Glint-Org).
+ADB screenshot capture for **Android**, optional **web** crawl, and intelligent filtering with **your** API key. Part of [Glint](https://github.com/GlintShot).
 
 > For Flutter store sizes without a device, use [Glint-Capture](../Glint-Capture).
 

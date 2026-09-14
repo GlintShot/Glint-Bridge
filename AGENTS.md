@@ -4,7 +4,7 @@ ADB screenshot capture for Android apps. Real device, real pixels, no cropping.
 
 **You (the agent) are the intelligence.** Developers should not configure API keys for Capture.
 
-**Full workflow:** See `skills/glint/SKILL.md` in Glint-Org for the complete multi-repo pipeline.
+**Full workflow:** See `skills/glint/SKILL.md` in the GlintShot org for the complete multi-repo pipeline.
 
 ## Primary commands
 
