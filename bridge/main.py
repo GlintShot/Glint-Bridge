@@ -91,7 +91,7 @@ def main():
             except RuntimeError as e:
                 print(f"AI: not ready ({e})")
         else:
-            print("AI: off (set GLINT_AI_API_KEY and use --ai for intelligent crawl)")
+            print("AI: off - fine for agentic IDE (you plan). Optional --ai crawl needs GLINT_AI_API_KEY.")
         sys.exit(0 if shutil.which("adb") else 1)
 
     if args.mode != "crawl-web" and not check_adb():

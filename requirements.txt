@@ -1,5 +1,5 @@
+Pillow>=10.0
 websockets>=12.0
 # Optional crawl stacks (uncomment what you need):
 # Appium-Python-Client>=4.0   # Android crawl
 # playwright>=1.40            # web crawl  (+ run: playwright install chromium)
-# Pillow>=10.0                # smaller vision payloads for AI crawl
