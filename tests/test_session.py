@@ -21,7 +21,8 @@ class TestSession(unittest.TestCase):
 
         session = load_session(self.out)
         self.assertEqual(session["screens"], ["home.png", "profile.png"])
-        self.assertEqual(session["store"], "play")
+        # v1.0 schema normalizes legacy 'play' -> canonical store target 'play/phone'
+        self.assertEqual(session["store"], "play/phone")
         self.assertEqual(session["version"], "1.0")
         self.assertIn("exportedAt", session)
 
