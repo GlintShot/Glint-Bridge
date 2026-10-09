@@ -192,15 +192,24 @@ def cmd_pass(
     crop_status: bool = True,
     crop_nav: bool = True,
     immersive: bool = True,
+    dedup: bool = False,
+    dedup_threshold: int = 8,
+    max_retries: int = 3,
 ) -> dict:
     """One-shot store pack: launch → N screenshots with swipes between.
 
     Designed for agents: one JSON reply instead of 10+ tool calls.
     swipe: horizontal (pager apps) | vertical (lists)
+
+    If `dedup` is set, each captured frame is compared (visual average-hash)
+    to the previous accepted frame; when two are near-identical the crawler
+    re-swipes and re-shoots (up to `max_retries` times) so the final pack
+    contains *distinct* screens instead of N copies of the same menu.
     """
     from .capture import OUTPUT_DIR
     from .session import write_session
     from .system_chrome import immersive_chrome
+    from .image_hash import is_similar
 
     count = max(1, min(int(count), 10))
     if clear and OUTPUT_DIR.exists():
@@ -224,18 +233,43 @@ def cmd_pass(
         between = "left" if swipe.startswith("h") else "forward"
         files: list[str] = []
         steps: list[dict] = []
+        last_kept: Path | None = None
+        max_tries = max_retries if dedup else 0
+
         for i in range(count):
             name = f"shot_{i + 1:02d}.png"
-            shot = cmd_screenshot(
-                serial,
-                name,
-                true_color=true_color,
-                crop_status=crop_status,
-                crop_nav=crop_nav,
-            )
-            if not shot.get("ok"):
-                steps.append({"i": i + 1, "ok": False, "error": shot.get("error")})
+            attempts = 0
+            shot: dict | None = None
+            # Re-shoot + re-swipe when the frame is a near-duplicate of the
+            # previous accepted one (max_tries extra attempts; then accept any).
+            while True:
+                attempts += 1
+                shot = cmd_screenshot(
+                    serial,
+                    name,
+                    true_color=true_color,
+                    crop_status=crop_status,
+                    crop_nav=crop_nav,
+                )
+                if not shot.get("ok"):
+                    if attempts == 1:
+                        steps.append({"i": i + 1, "ok": False, "error": shot.get("error")})
+                    break
+                if (
+                    not dedup
+                    or last_kept is None
+                    or not is_similar(OUTPUT_DIR / name, last_kept, dedup_threshold)
+                ):
+                    break  # distinct (or dedup disabled / out of retries) -> accept
+                if attempts > max_tries:
+                    break  # retries exhausted - accept rather than leave a gap
+                cmd_scroll(serial, between)
+                time.sleep(max(0.35, settle * 0.6))
+
+            if not shot or not shot.get("ok"):
                 break
+
+            last_kept = OUTPUT_DIR / name
             files.append(shot["file"])
             hier = cmd_hierarchy(serial, package)
             text = hier.get("text") if hier.get("ok") else []
@@ -244,7 +278,9 @@ def cmd_pass(
                 "file": shot["file"],
                 "text": (text or [])[:6],
                 "chromeCropped": shot.get("chromeCropped"),
+                "dupRetries": attempts - 1,
             })
+
             if i < count - 1:
                 cmd_scroll(serial, between)
                 time.sleep(max(0.35, settle * 0.6))
@@ -327,6 +363,23 @@ def main(argv: list[str] | None = None) -> None:
     pa.add_argument("--keep-status", action="store_true")
     pa.add_argument("--keep-nav", action="store_true")
     pa.add_argument("--no-immersive", action="store_true")
+    pa.add_argument(
+        "--dedup",
+        action="store_true",
+        help="Re-swipe when consecutive shots look identical (distinct store pack)",
+    )
+    pa.add_argument(
+        "--dedup-threshold",
+        type=int,
+        default=8,
+        help="Max perceptual-hash Hamming distance for two shots to count as the same screen (default 8)",
+    )
+    pa.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Extra re-swipes per frame before accepting a duplicate (default 3)",
+    )
 
     args = p.parse_args(argv)
 
@@ -360,6 +413,9 @@ def main(argv: list[str] | None = None) -> None:
             crop_status=not args.keep_status,
             crop_nav=not args.keep_nav,
             immersive=not args.no_immersive,
+            dedup=args.dedup,
+            dedup_threshold=args.dedup_threshold,
+            max_retries=args.max_retries,
         )
     else:
         res = {"ok": False, "error": "unknown command"}

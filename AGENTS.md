@@ -18,7 +18,7 @@ devices → launch → loop{ screenshot, hierarchy, tap|scroll|back } → polish
 |---------|---------|
 | `python glint.py check` | ADB present? |
 | `python glint.py devices` | USB / Wi‑Fi targets |
-| `python glint.py agent pass com.app --count 5` | Launch + N shots + theme (preferred) |
+| `python glint.py agent pass com.app --count 5 [--dedup]` | Launch + N shots + theme (preferred); add `--dedup` to skip near-duplicate screens |
 | `python glint.py agent launch com.app` | Open app |
 | `python glint.py agent screenshot` | PNG → `output/` (crops status/nav by default) |
 | `python glint.py agent hierarchy [--package com.app]` | Clickable targets + text |
@@ -28,6 +28,8 @@ devices → launch → loop{ screenshot, hierarchy, tap|scroll|back } → polish
 | `python glint.py extract-theme output/` | Sample brand colors → theme.json |
 
 Chrome flags: `--keep-status` / `--keep-nav` / `--no-immersive` on `pass` / `screenshot`.
+
+Dedup: `pass` auto-swipes to advance frames. If an app's pager loops back to the same screen (menus, carousels), pass `--dedup` to re-shoot until each of the N frames is visually distinct. `--dedup-threshold` (default 8) is the max Hamming distance for two shots to count as "same screen"; `--max-retries` (default 3) bounds re-shoots per frame.
 
 MCP: `glint_bridge_pass` or step tools `glint_bridge_*`.
 
@@ -45,7 +47,7 @@ MCP: `glint_bridge_pass` or step tools `glint_bridge_*`.
 ### "Capture screenshots from my Android app"
 
 1. `python glint.py check` / `devices`
-2. `python glint.py agent pass com.app --count 5`
+2. `python glint.py agent pass com.app --count 5 [--dedup]`
 3. Polish (below) or import `output/` into Studio
 
 ### Headless CI only (no IDE agent)
