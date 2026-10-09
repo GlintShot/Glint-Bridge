@@ -27,7 +27,9 @@ def test_pick_theme_colors():
         "248,248,248": 200,
     }
     theme = build_theme_from_counts(counts, counts, ["primary", "background"])
-    assert theme["primary"] == "#6020A0"
+    # primary is brand-punched to match Glint-Web's buildHarmonyFromPrimary
+    # (punchSaturation('#6020A0', 0.1)) -> #601DA3, not the raw extracted hex
+    assert theme["primary"] == "#601DA3"
     assert theme["background"] == "#F8F8F8"
 
 
