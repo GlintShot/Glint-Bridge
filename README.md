@@ -62,7 +62,7 @@ Shortcuts: `python glint.py launch com.app` · `python glint.py hierarchy`
 ```bash
 python glint.py capture    # one PNG → output/
 python glint.py batch 5    # five PNGs + session.json
-python glint.py start      # WebSocket for Glint Studio live pairing
+python glint.py start      # WebSocket: pair + live mirror + snap into Glint Web
 ```
 
 ## Headless crawl (CI / no IDE agent)

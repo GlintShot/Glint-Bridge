@@ -10,7 +10,11 @@ except ImportError:
     msg = "websockets is required. Install with: pip install websockets"
     raise ImportError(msg)
 
-from .capture import capture_screenshot, batch_capture
+from .capture import (
+    batch_capture,
+    capture_frame_jpeg,
+    capture_screenshot,
+)
 from .adb_usb import list_usb_devices
 from .adb_wifi import connect_wifi, list_wifi_devices
 from .crawler import crawl_app
@@ -18,6 +22,11 @@ from .session import write_session, load_session
 
 WS_PORT = 7700
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
+
+# Soft-launch defaults: ~6 fps preview, ~540px wide JPEG.
+STREAM_INTERVAL_S = 0.16
+STREAM_MAX_WIDTH = 540
+STREAM_JPEG_QUALITY = 70
 
 connected_clients = set()
 _PAIRING_TOKEN: str | None = None
@@ -46,6 +55,48 @@ def _paths_to_data_urls(paths: list) -> list[str]:
     return out
 
 
+async def _live_stream_loop(
+    websocket,
+    serial: str | None,
+    interval: float,
+    max_width: int,
+    quality: int,
+):
+    """Push JPEG preview frames until cancelled."""
+    loop = asyncio.get_running_loop()
+    fails = 0
+    while True:
+        jpeg = await loop.run_in_executor(
+            None,
+            lambda: capture_frame_jpeg(
+                serial=serial,
+                max_width=max_width,
+                quality=quality,
+            ),
+        )
+        if jpeg:
+            fails = 0
+            b64 = base64.b64encode(jpeg).decode("ascii")
+            await websocket.send(json.dumps({
+                "type": "live_frame",
+                "data_url": f"data:image/jpeg;base64,{b64}",
+            }))
+        else:
+            fails += 1
+            if fails == 1 or fails % 8 == 0:
+                await websocket.send(json.dumps({
+                    "type": "error",
+                    "message": "Live mirror: no frame from device. Is ADB connected?",
+                }))
+            if fails >= 20:
+                await websocket.send(json.dumps({
+                    "type": "stream_stopped",
+                    "reason": "no_frames",
+                }))
+                return
+        await asyncio.sleep(interval)
+
+
 async def handler(websocket):
     global _PAIRING_TOKEN
 
@@ -66,6 +117,27 @@ async def handler(websocket):
 
     await websocket.send(json.dumps({"type": "paired", "success": True}))
     connected_clients.add(websocket)
+    stream_task: asyncio.Task | None = None
+
+    async def stop_stream(reason: str = "client", *, notify: bool = True):
+        nonlocal stream_task
+        had = stream_task is not None and not stream_task.done()
+        if had:
+            stream_task.cancel()
+            try:
+                await stream_task
+            except asyncio.CancelledError:
+                pass
+        stream_task = None
+        if had and notify:
+            try:
+                await websocket.send(json.dumps({
+                    "type": "stream_stopped",
+                    "reason": reason,
+                }))
+            except Exception:
+                pass
+
     try:
         async for raw in websocket:
             try:
@@ -77,10 +149,29 @@ async def handler(websocket):
             if action == "ping":
                 await websocket.send(json.dumps({"type": "pong"}))
 
+            elif action == "stream_start":
+                await stop_stream("restart", notify=False)
+                serial = data.get("serial") or None
+                interval = float(data.get("interval", STREAM_INTERVAL_S))
+                interval = max(0.08, min(1.0, interval))
+                max_width = int(data.get("max_width", STREAM_MAX_WIDTH))
+                quality = int(data.get("quality", STREAM_JPEG_QUALITY))
+                stream_task = asyncio.create_task(
+                    _live_stream_loop(websocket, serial, interval, max_width, quality),
+                )
+                await websocket.send(json.dumps({
+                    "type": "stream_started",
+                    "interval": interval,
+                    "max_width": max_width,
+                }))
+
+            elif action == "stream_stop":
+                await stop_stream("client")
+
             elif action == "capture_single":
                 path = capture_screenshot()
                 session = load_session()
-                data_url = _file_to_data_url(path)
+                data_url = _file_to_data_url(path) if path else None
                 await websocket.send(json.dumps({
                     "type": "screenshot",
                     "path": path,
@@ -213,6 +304,12 @@ async def handler(websocket):
                     "message": f"Unknown action: {action}",
                 }))
     finally:
+        if stream_task and not stream_task.done():
+            stream_task.cancel()
+            try:
+                await stream_task
+            except asyncio.CancelledError:
+                pass
         connected_clients.discard(websocket)
 
 
